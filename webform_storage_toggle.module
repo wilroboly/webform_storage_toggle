@@ -1,0 +1,179 @@
+<?php
+/**
+ * @file
+ * A description of what your module does.
+ *
+ *
+ */
+
+
+/**
+ * Implementation of hook_form_FORM_ID_alter().
+ */
+function webform_storage_toggle_form_webform_admin_settings_alter(&$form, $form_state) {
+  // Add our config options to the webform settings page.
+  $form['storage_toggle'] = array(
+    '#type' => 'fieldset',
+    '#title' => t('Webform Storage Options'),
+    '#collapsible' => TRUE,
+    '#collapsed' => FALSE,
+  );
+  $form['storage_toggle']['webform_storage_toggle_GENERIC'] = array(
+    '#type' => 'checkbox',
+    '#title' => t('Enable GENERIC'),
+    '#description' => t('If enabled, GENERIC'),
+    '#default_value' => variable_get('webform_storage_toggle_GENERIC', 0),
+  );
+}
+
+/**
+ * Implementation of hook_form_FORM_ID_alter().
+ */
+function webform_storage_toggle_form_webform_component_edit_form_alter(&$form, $form_state) {
+  // Add our fields to the component add/edit form.
+  $component = $form_state['build_info']['args'][1];
+
+  // Exclude webform component types that don't make sense to toggle.
+  $excluded_types = array('fieldset', 'file', 'markup', 'pagebreak');
+  if (!in_array($form['type']['#value'], $excluded_types)) {
+
+    // Add settings for storage toggle features.
+    $form['storage'] = array(
+      '#type' => 'fieldset',
+      '#title' => t('Field Storage Options'),
+      '#tree' => TRUE,
+    );
+    $form['storage']['db_toggle'] = array(
+      '#type' => 'checkbox',
+      '#title' => t('Do not store this field\'s value'),
+      '#description' => t('The field will not have the submitted value stored in the webform result table.'),
+      '#default_value' => isset($component['extra']['db_toggle']) ? $component['extra']['db_toggle'] : 0,
+    );
+    $form['storage']['email_toggle'] = array(
+      '#type' => 'checkbox',
+      '#title' => t('Do not send this field\'s value'),
+      '#description' => t('The field will not have the submitted value sent to destination (email or otherwise)'),
+      '#default_value' => isset($component['extra']['email_toggle']) ? $component['extra']['email_toggle'] : 0,
+    );
+  }
+}
+
+/**
+ * Implementation of hook_form_alter().
+ */
+function webform_storage_toggle_form_alter(&$form, &$form_state, $form_id) {
+  // When we are editing a webform submission,
+  if (strpos($form_id, 'webform_client_form_') === 0 && $form['details']['sid']['#value']) {
+    _webform_storage_toggle_decrypt_nested_values($form['submitted']);
+  }
+}
+
+/**
+ * Implementation of hook_webform_component_presave().
+ * Save db_toggle settings for a component.
+ */
+function webform_storage_toggle_webform_component_presave(&$component) {
+  if (!empty($component['storage'])) {
+    $component['extra'] = array_merge($component['extra'], $component['storage']);
+    unset($component['storage']);
+  }
+}
+
+/**
+ * Implementation of hook_webform_submission_presave().
+ * Kill the value if the component has been marked as such.
+ */
+function webform_storage_toggle_webform_submission_presave($node, &$submission) {
+  foreach ($submission->data as $cid => $entry) {
+    if (!empty($node->webform['components'][$cid]['extra']['db_toggle'])) {
+      foreach ($submission->data[$cid] as $delta => $value) {
+        $submission->data[$cid][$delta] = kill_value();//encrypt($entry[$delta], array('base64' => TRUE));
+      }
+    }
+  }
+}
+
+/**
+ * Implementation of hook_webform_submission_load().
+ * Ensure loading killed values brings up a notice for this such that results
+ * do not look odd. A notice should be included in the table or cell row
+ */
+function webform_storage_toggle_webform_submission_load($submissions) {
+  foreach ($submissions as $submission) {
+    $node = node_load($submission->nid);
+    foreach ($submission->data as $cid => $entry) {
+      if (!empty($node->webform['components'][$cid]['extra']['db_toggle'])) {
+        foreach ($submission->data[$cid] as $delta => $value) {
+          if (!empty($entry[$delta]) && @unserialize($entry[$delta]) !== FALSE) {
+            $submission->data[$cid][$delta] = load_killed_value_notice();
+          }
+        }
+      }
+    }
+  }
+}
+
+/**
+ * Implementation of hook_webform_submission_render_alter().
+ * Ensure loading killed values brings up a notice when displaying
+ * webform submissions.
+ */
+function webform_storage_toggle_webform_submission_render_alter(&$renderable) {
+  // First, determine if 1) if we are dealing with an email or a page view
+  if (!empty($renderable['#email'])) {
+    // If we are, then try to match a user to the email address we are sending to.
+    $uid = db_query('SELECT uid FROM {users} WHERE mail = ?', array($renderable['#email']['email']))->fetchField();
+    $account = $uid ? user_load($uid) : NULL;
+  } else {
+    $account = NULL;
+  }
+
+  // Next, we loop through components and bounce the values as necessary.
+  _webform_storage_toggle_killed_values($renderable, '#value', array('account' => $account));
+}
+
+/**
+ * Preprocess for theme('webform_results_table').
+ *
+ * Decrypt webform values in the table display.
+ */
+function webform_storage_toggle_preprocess_webform_results_table(&$vars) {
+  foreach ($vars['submissions'] as $sid => &$submission) {
+    foreach ($submission->data as $cid => &$item) {
+      $component = $vars['components'][$cid];
+      if (!empty($component['extra']['db_toggle'])) {
+        foreach ($item['value'] as &$value) {
+          //$value = _webform_storage_toggle_do_something_with_value();
+        }
+      }
+    }
+  }
+}
+
+/**
+ * Helper function to recursively decrypt values in a webform structure.
+ */
+function _webform_storage_toggle_killed_values(&$element, $key = '#default_value', $restrict = array()) {
+
+  // Loop through each item and kill the value.
+  foreach (element_children($element) as $name) {
+    $component = &$element[$name];
+    if (!empty($component['#webform_component']['extra']['db_toggle'])) {
+      if (is_array($component[$key])) {
+        foreach ($component[$key] as &$value) {
+          $value = _webform_storage_toggle_do_something_with_value(); //$access ? decrypt($value, array('base64' => TRUE)) : t('[Value Encrypted]');
+        }
+      }
+      else {
+        $component[$key] = _webform_storage_toggle_do_something_with_value(); // decrypt($component[$key], array('base64' => TRUE)) : t('[Value Encrypted]');
+      }
+    }
+
+    // Recurse if the current item has children.
+    _webform_storage_toggle_killed_values($component, $key, $restrict);
+  }
+}
+
+function _webform_storage_toggle_do_something_with_value() {
+  return t('Empty Field');
+}
