@@ -18,12 +18,43 @@ function webform_storage_toggle_form_webform_admin_settings_alter(&$form, $form_
     '#collapsible' => TRUE,
     '#collapsed' => FALSE,
   );
-  $form['storage_toggle']['webform_storage_toggle_GENERIC'] = array(
+
+  $null_flag = variable_get('webform_storage_toggle_null_flag');
+  $form['storage_toggle']['webform_storage_toggle_null_flag'] = array(
     '#type' => 'checkbox',
-    '#title' => t('Enable GENERIC'),
-    '#description' => t('If enabled, GENERIC'),
-    '#default_value' => variable_get('webform_storage_toggle_GENERIC', 0),
+    '#title' => t('Enable the use of a NULL value as a replacement'),
+    '#default_value' => $null_flag ? $null_flag : 0,
+    '#description' => t('<p>When the storage toggle to obfuscate the field\'s submission is set, make that value NULL. This will ensure nothing is stored in the DB. Depending on the type of field, this could be a <strong>blank</strong> space, the number <strong>0</strong> or for a boolean <strong>FALSE</strong>.</p><p><strong>It is strongly urged not to use this for booleans as it could lead to confusing results.</strong></p><p>Note: you can in fact disable this functionality altogether by unchecking this box. Useful when debugging tables and you need the values to the filled even though the fields have been individually selected.</p>'),
   );
+
+  $form['storage_toggle']['webform_storage_toggle_use_textfield_replacement'] = array(
+    '#type' => 'checkbox',
+    '#title' => t('Use a different string as opposed to a NULL for textfields'),
+    '#default_value' => variable_get(webform_storage_toggle_use_textfield_replacement, 0),
+    '#description' => t('In the very rare occasion you need some kind of different value in the textfields as opposed to a blank space or NULL value. Select this checkbox and fill in the field below'),
+  );
+
+  $form['storage_toggle']['webform_storage_toggle_obfuscation_value'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Obfuscation value'),
+    '#default_value' => variable_get('webform_storage_toggle_obfuscation_value'),
+    '#description' => t('This value will be used in the replacement of submission textfield values.'),
+    '#states' => array(
+      'visible' => array(
+        ':input[name="webform_storage_toggle_use_textfield_replacement"]' => array('checked' => TRUE),
+      ),
+    ),
+  );
+
+  $obfuscation_display_text = variable_get('webform_storage_toggle_obfuscation_display_text');
+  $form['storage_toggle']['webform_storage_toggle_obfuscation_display_text'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Obfuscation display text'),
+    '#default_value' => isset($obfuscation_display_text) ? $obfuscation_display_text : t('n/a'),
+    '#description' => t('Any fields using the obfuscation replacement will have their displayed values replaced with this text.'),
+  );
+
+
 }
 
 /**
@@ -41,19 +72,16 @@ function webform_storage_toggle_form_webform_component_edit_form_alter(&$form, $
     $form['storage'] = array(
       '#type' => 'fieldset',
       '#title' => t('Field Storage Options'),
-      '#tree' => TRUE,
+      '#collapsible' => TRUE,
+      '#collapsed' => FALSE,
+      '#weight' => 10,
     );
+
     $form['storage']['db_toggle'] = array(
       '#type' => 'checkbox',
-      '#title' => t('Do not store this field\'s value'),
-      '#description' => t('The field will not have the submitted value stored in the webform result table.'),
+      '#title' => t('Do not store this field\'s value in the DB'),
+      '#description' => t('This option will bypass the storing of this field\'s value in the DB. This ensures the data is only captured in memory and kept until the submission process is completed and all othe processing is complete. In place of the submission, a replacement value will be saved. The value may be modified in the global <a href="!url">Webform settings</a>.', array('!url' => url('admin/config/content/webform'))),
       '#default_value' => isset($component['extra']['db_toggle']) ? $component['extra']['db_toggle'] : 0,
-    );
-    $form['storage']['email_toggle'] = array(
-      '#type' => 'checkbox',
-      '#title' => t('Do not send this field\'s value'),
-      '#description' => t('The field will not have the submitted value sent to destination (email or otherwise)'),
-      '#default_value' => isset($component['extra']['email_toggle']) ? $component['extra']['email_toggle'] : 0,
     );
   }
 }
@@ -64,7 +92,7 @@ function webform_storage_toggle_form_webform_component_edit_form_alter(&$form, $
 function webform_storage_toggle_form_alter(&$form, &$form_state, $form_id) {
   // When we are editing a webform submission,
   if (strpos($form_id, 'webform_client_form_') === 0 && $form['details']['sid']['#value']) {
-    _webform_storage_toggle_decrypt_nested_values($form['submitted']);
+    _webform_storage_toggle_do_something_with_value($form['submitted']);
   }
 }
 
@@ -87,7 +115,7 @@ function webform_storage_toggle_webform_submission_presave($node, &$submission) 
   foreach ($submission->data as $cid => $entry) {
     if (!empty($node->webform['components'][$cid]['extra']['db_toggle'])) {
       foreach ($submission->data[$cid] as $delta => $value) {
-        $submission->data[$cid][$delta] = kill_value();//encrypt($entry[$delta], array('base64' => TRUE));
+        $submission->data[$cid][$delta] = _webform_storage_toggle_kill_value();//encrypt($entry[$delta], array('base64' => TRUE));
       }
     }
   }
@@ -105,7 +133,7 @@ function webform_storage_toggle_webform_submission_load($submissions) {
       if (!empty($node->webform['components'][$cid]['extra']['db_toggle'])) {
         foreach ($submission->data[$cid] as $delta => $value) {
           if (!empty($entry[$delta]) && @unserialize($entry[$delta]) !== FALSE) {
-            $submission->data[$cid][$delta] = load_killed_value_notice();
+            $submission->data[$cid][$delta] = _webform_storage_toggle_load_killed_value_notice();
           }
         }
       }
@@ -150,6 +178,18 @@ function webform_storage_toggle_preprocess_webform_results_table(&$vars) {
   }
 }
 
+
+/**
+ * Implements hook_after_submission_obfuscation().
+ *
+ * Set up the data then invoke the Rules event.
+ */
+function webform_storage_toggle_after_submission_obfuscation($submission) {
+  if (module_exists('rules')) {
+    rules_invoke_event('after_submission_obfuscation', $submission);
+  }
+}
+
 /**
  * Helper function to recursively decrypt values in a webform structure.
  */
@@ -172,6 +212,14 @@ function _webform_storage_toggle_killed_values(&$element, $key = '#default_value
     // Recurse if the current item has children.
     _webform_storage_toggle_killed_values($component, $key, $restrict);
   }
+}
+
+function _webform_storage_toggle_kill_value() {
+  return "n/a";
+}
+
+function _webform_storage_toggle_load_killed_value_notice() {
+  return t('Empty Field');
 }
 
 function _webform_storage_toggle_do_something_with_value() {

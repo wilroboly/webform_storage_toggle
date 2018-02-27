@@ -15,7 +15,7 @@
 function webform_storage_toggle_rules_data_info() {
   return array(
     'webform_storage_toggle' => array(
-      'label' => t('Storage Submission Data'),
+      'label' => t('Submission Data'),
       'group' => t('Storage Toggle'),
       'property info' => _webform_storage_toggle_rules_submission_info(),
     ),
@@ -53,9 +53,30 @@ function webform_storage_toggle_rules_action_info() {
       'description' => t('This will apply the obfuscation value to the submission field in question.'),
       'base' => 'webform_storage_toggle_rules_action_handle_default',
       'parameter' => array(
-        'webform_storage_toggle' => array(
-          'type' => 'webform_storage_toggle',
-          'label' => t('FillPDF metadata'),
+        'data' => array(
+          'type' => 'data',
+          'label' => t('Submission data value to obfuscate'),
+        ),
+        'message' => array(
+          'type' => 'text',
+          'label' => t('Message'),
+          'sanitize' => TRUE,
+          'translatable' => TRUE,
+        ),
+        'type' => array(
+          'type' => 'token',
+          'label' => t('Message type'),
+          'options list' => 'rules_action_drupal_message_types',
+          'default value' => 'status',
+          'optional' => TRUE,
+        ),
+        'repeat' => array(
+          'type' => 'boolean',
+          'label' => t('Repeat message'),
+          'description' => t("If disabled and the message has been already shown, then the message won't be repeated."),
+          'default value' => TRUE,
+          'optional' => TRUE,
+          'restriction' => 'input',
         ),
       ),
     ),
