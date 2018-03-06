@@ -12,15 +12,15 @@
 /**
  * Implements hook_rules_data_info().
  */
-function webform_storage_toggle_rules_data_info() {
-  return array(
-    'webform_storage_toggle' => array(
-      'label' => t('Submission Data'),
-      'group' => t('Storage Toggle'),
-      'property info' => _webform_storage_toggle_rules_submission_info(),
-    ),
-  );
-}
+//function webform_storage_toggle_rules_data_info() {
+//  return array(
+//    'webform_storage_toggle' => array(
+//      'label' => t('Submission Data'),
+//      'group' => t('Storage Toggle'),
+//      'property info' => _webform_storage_toggle_rules_submission_info(),
+//    ),
+//  );
+//}
 
 /**
  * Implements hook_rules_event_info().
@@ -41,7 +41,19 @@ function webform_storage_toggle_rules_event_info() {
 }
 
 /**
+ * Implements hook_rules_condition_info().
+ */
+function webform_storage_toggle_rules_condition_info() {
+  /* Blank at the moment */
+}
+
+
+/**
  * Implements hook_rules_action_info().
+ *
+ * TODO: Review the access callback and see if we can mitigate it use in certain cases.
+ *       For now, we omit it and hope for the best.
+ *
  */
 function webform_storage_toggle_rules_action_info() {
   $defaults = array(
@@ -49,46 +61,54 @@ function webform_storage_toggle_rules_action_info() {
   );
   return array(
     'webform_storage_toggle_obfuscate' => $defaults + array(
-      'label' => t('Obfuscate submission value'),
-      'description' => t('This will apply the obfuscation value to the submission field in question.'),
-      'base' => 'webform_storage_toggle_rules_action_handle_default',
-      'parameter' => array(
-        'data' => array(
-          'type' => 'data',
-          'label' => t('Submission data value to obfuscate'),
-        ),
-        'message' => array(
-          'type' => 'text',
-          'label' => t('Message'),
-          'sanitize' => TRUE,
-          'translatable' => TRUE,
-        ),
-        'type' => array(
-          'type' => 'token',
-          'label' => t('Message type'),
-          'options list' => 'rules_action_drupal_message_types',
-          'default value' => 'status',
-          'optional' => TRUE,
-        ),
-        'repeat' => array(
-          'type' => 'boolean',
-          'label' => t('Repeat message'),
-          'description' => t("If disabled and the message has been already shown, then the message won't be repeated."),
-          'default value' => TRUE,
-          'optional' => TRUE,
-          'restriction' => 'input',
+        'label' => t('Obfuscate submission values'),
+        'description' => t('This will apply the obfuscation value to the submission fields marked "<strong>Do not store this field\'s value in the DB</strong>"'),
+        'base' => 'webform_storage_toggle_obfuscate_submission',
+        'access callback' => 'webform_storage_toggle_node_access',
+        'parameter' => array(
+          'node' => array(
+            'type' => 'node',
+            'label' => t('Webform Node'),
+            'description' => t('The full object of the webform node to update the submission for.'),
+          ),
+          'data' => array(
+            'type' => 'webform',
+            'label' => t('Submission'),
+            'description' => t('The current submission values'),
+            'allow null' => TRUE,
+            'optional' => TRUE,
+          ),
         ),
       ),
-    ),
   );
 }
 
+
 /**
- * Implements hook_rules_condition_info().
+ * Node integration admin access callback.
  */
-function webform_storage_toggle_rules_condition_info() {
-  /* Blank at the moment */
+function webform_storage_toggle_node_access() {
+  return user_access('administer nodes') || user_access('update anonymous submission');
 }
+
+/**
+ * Rules action to obfuscate submission values
+ */
+function webform_storage_toggle_obfuscate_submission($node, $data = NULL) {
+  // Make sure the needed functions are available.
+  module_load_include('inc', 'webform', 'includes/webform.submissions');
+
+  $filters = array(
+    'nid' => $node->nid,
+  );
+  if (!empty($data)) {
+    $filters['sid'] = $data['sid'];
+  }
+  //TODO: With the NODE ID and the SID we can now run through the submission, component by component and
+  //      iterate through the list of values. As we
+  //webform_submission_update($node, $submission)
+}
+
 
 /**
  * @} End of "defgroup rules_hooks".
@@ -98,7 +118,7 @@ function webform_storage_toggle_rules_condition_info() {
 
 
 /**
- * @defgroup condition_callbacks Condition callbacks
+ * @defgroup webform_storage_toggle_rules
  * @{
  */
 
@@ -110,5 +130,5 @@ function _webform_storage_toggle_rules_submission_info() {
 }
 
 /**
- * @} End of "defgroup condition_callbacks".
+ * @} End of "defgroup webform_storage_toggle_rules".
  */
