@@ -1,0 +1,64 @@
+<?php
+
+/**
+ * @file
+ * webform_validation installation file
+ */
+
+/**
+ * TODO: Look to maybe implement a table for settings rather than use the variable table.
+ * Implements hook_schema().
+ */
+//function webform_storage_toggle_schema() {
+//  $schema['webform_storage_toggle'] = array(
+//    'description' => 'description of the table',
+//    'fields' => array(
+//      'nid' => array(
+//        'description' => 'The node identifier of a webform.',
+//        'type' => 'int',
+//        'unsigned' => TRUE,
+//        'not null' => TRUE,
+//      ),
+//      'settings' => array(
+//        'description' => 'A collection of settings to store.',
+//        'type' => 'blob',
+//        'not null' => FALSE,
+//        'size' => 'big',
+//      ),
+//    ),
+//    'indexes' => array('nid' => array('nid')),
+//    'primary key' => array('nid'),
+//  );
+//
+//  return $schema;
+//}
+
+/**
+ * Implements hook_install().
+ */
+function webform_storage_toggle_install() {
+  $toggle_settings = variable_get('webform_storage_toggle_settings');
+
+  if (empty($toggle_settings)) {
+    $toggle_settings = array(
+      'null_flag' => FALSE,
+      'use_textfield_replacement' => FALSE,
+      'obfuscation_value' => '',
+      'obfuscation_display_text' => t('n/a'),
+    );
+
+    variable_set('webform_storage_toggle_settings', $toggle_settings);
+  }
+
+}
+
+/**
+ * Implements hook_uninstall().
+ */
+function webform_storage_toggle_uninstall() {
+  variable_del('webform_storage_toggle_settings');
+}
+
+/**
+ * Implements hook_update_N().
+ */
