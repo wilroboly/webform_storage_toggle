@@ -254,7 +254,7 @@ function webform_storage_toggle_webform_submission_load($submissions) {
     $node = node_load($submission->nid);
     foreach ($submission->data as $cid => $entry) {
       $component = $node->webform['components'][$cid];
-      if ($component['extra']['db_toggle'] == TRUE) {
+      if (isset($component['extra']['db_toggle']) && ($component['extra']['db_toggle'] == TRUE)) {
         foreach ($submission->data[$cid] as $delta => $value) {
           if (!empty($entry[$delta]) && @unserialize($entry[$delta]) !== FALSE) {
             $submission->data[$cid][$delta] = _webform_storage_toggle_load_obfuscation_text($submission->nid);
@@ -327,7 +327,7 @@ function webform_storage_toggle_obfuscate_check($component) {
     $use_text_flag = $toggle_settings['null_flag'];
   }
 
-  return $use_text_flag? ($component['extra']['db_toggle'] == TRUE) && ($component['extra']['webform_storage_toggle_process_order'] == 'on') : FALSE;
+  return $use_text_flag? ((isset($component['extra']['db_toggle'])) && $component['extra']['db_toggle'] == TRUE) && ($component['extra']['webform_storage_toggle_process_order'] == 'on') : FALSE;
 }
 
 
@@ -368,7 +368,7 @@ function _webform_storage_toggle_obfuscate_value($component) {
     $toggle_settings = $toggle_settings[$component['nid']];
   }
 
-  $toggle_settings['use_textfield_replacement'] ? $text_replace = $toggle_settings['obfuscation_value'] : '';
+  $text_replace = $toggle_settings['use_textfield_replacement'] ? $toggle_settings['obfuscation_value'] : '';
 
   switch ($component['type']) {
     // Have never seen this type before. But just in case someone makes it.
