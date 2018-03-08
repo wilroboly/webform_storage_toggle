@@ -93,20 +93,39 @@ function webform_storage_toggle_node_access() {
 
 /**
  * Rules action to obfuscate submission values
+ *
+ * The reason we have this rule is in order for some obfuscation to happen, it would have to occur
+ * after the submission already exists in the DB. This could be due to a post-processing module on the
+ * webform submission. Obfuscation could happen on submission in a normal course of action, but would
+ * therefore empty the fields when an action occurs on the submission post the "saved" values. This would
+ * mean values analyzed or managed on the submission would return incorrect information. This method helps
+ * to permit values stored in the DB for post-submission processing can be acted upon and once completed,
+ * this RULES ACTION could then be applied, filtering through all the fields which are flagged "ready for
+ * obfuscation".
  */
 function webform_storage_toggle_obfuscate_submission($node, $data = NULL) {
   // Make sure the needed functions are available.
   module_load_include('inc', 'webform', 'includes/webform.submissions');
 
-  $filters = array(
-    'nid' => $node->nid,
-  );
-  if (!empty($data)) {
-    $filters['sid'] = $data['sid'];
+  if (!empty($data) && is_object($node) && !empty($node->webform)) {
+    // Get the submission object from the DB
+    $submission = webform_get_submission($node->webform['nid'], $data['sid']);
+    // Iterate through the webform submission and obfuscate
+    foreach ($data['components'] as $name => $component) {
+      // We're checking to see if the object is requesting to be processed via a rule in post.
+      if (isset($component['component']['extra']['webform_storage_toggle_process_order']) && ($component['component']['extra']['webform_storage_toggle_process_order'] == 'post')) {
+        // modify the submission object
+        $submission->data[$component['component']['cid']][0] = _webform_storage_toggle_obfuscate_value($component['component']);
+      }
+    }
+    // Here, once the $data object has been updated, we run the update on the submission data.
+    $result = webform_submission_update($node, $submission);
+
+    watchdog('webform_storage_toggle', 'Obfuscation of webform %webformID submission %subID completed.', array('%webformID' => $node->webform['nid'], '%subID' => $data['sid']), WATCHDOG_INFO);
+
   }
-  //TODO: With the NODE ID and the SID we can now run through the submission, component by component and
-  //      iterate through the list of values. As we
-  //webform_submission_update($node, $submission)
+
+
 }
 
 
