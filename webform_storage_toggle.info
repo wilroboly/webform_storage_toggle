@@ -1,5 +1,5 @@
 name = Webform Storage Toggle
-description = A description of what your module does.
+description = This module adds some extra storage options for Webforms.
 core = 7.x
 package = Webform
 
