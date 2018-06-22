@@ -73,11 +73,7 @@ function webform_storage_toggle_form($toggle_settings) {
 function webform_storage_toggle_form_webform_admin_settings_alter(&$form, $form_state) {
   $toggle_settings = variable_get('webform_storage_toggle_settings');
 
-  $node = $form['#node'];
-
-  $form['#submit'] += array(
-    'webform_storage_toggle_admin_settings_form_submit_save',
-  );
+  $form['#submit'][] = 'webform_storage_toggle_admin_settings_form_submit_save';
 
   $form += webform_storage_toggle_form($toggle_settings);
 }
@@ -106,10 +102,6 @@ function webform_storage_toggle_form_webform_configure_form_alter(&$form, &$form
 
   $node = $form['#node'];
 
-  $form['#submit'] += array(
-    'webform_storage_toggle_configure_form_submit_save',
-  );
-
   if (!empty($node->webform['nid'])) {
     $toggle_settings += array($node->webform['nid'] => array(
       'null_flag' => FALSE,
@@ -120,6 +112,8 @@ function webform_storage_toggle_form_webform_configure_form_alter(&$form, &$form
   }
 
   $current_webform_settings = $toggle_settings[$node->webform['nid']];
+
+  $form['#submit'][] = 'webform_storage_toggle_configure_form_submit_save';
 
   $form += webform_storage_toggle_form($current_webform_settings);
 
@@ -418,5 +412,10 @@ function _webform_storage_toggle_load_obfuscation_text($nid) {
  * @return variable value
  */
 function _webform_storage_toggle_display_obfuscation_text($component) {
-  return _webform_storage_toggle_load_obfuscation_text($component['nid']);
+  if (isset($component['nid'])) {
+    return _webform_storage_toggle_load_obfuscation_text($component['nid']);
+  }
+  if (isset($component['#node']->nid)) {
+    return _webform_storage_toggle_load_obfuscation_text($component['#node']->nid);
+  }
 }
